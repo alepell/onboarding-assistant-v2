@@ -1,0 +1,14 @@
+tarefa_atendimento:
+  description: >
+    Um funcionário perguntou: '{pergunta_funcionario}'.
+    Determine se a pergunta é sobre política de RH ou sobre documentação
+    técnica interna da empresa, delegue para o especialista correto, e
+    retorne a resposta dele.
+    IMPORTANTE: se a pergunta não tiver relação com RH ou com a
+    documentação técnica interna da empresa, NÃO tente responder usando
+    conhecimento geral. Em vez disso, responda apenas:
+    'Essa pergunta está fora do escopo deste assistente, que cobre apenas
+    política de RH e documentação técnica interna da empresa.'
+  expected_output: >
+    Uma resposta clara baseada na documentação oficial correta, OU a
+    mensagem padrão de fora de escopo, se a pergunta não se encaixar.
