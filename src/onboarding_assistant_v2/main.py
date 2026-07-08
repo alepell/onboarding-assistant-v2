@@ -1,64 +1,56 @@
 #!/usr/bin/env python
-from pathlib import Path
 
 from pydantic import BaseModel
 
 from crewai.flow import Flow, listen, start
 
-from onboarding_assistant_v2.crews.content_crew.content_crew import ContentCrew
+from onboarding_assistant_v2.crews.onboarding_crew.onboarding_crew import OnboardingCrew
 
 
-class ContentState(BaseModel):
-    topic: str = ""
-    outline: str = ""
-    draft: str = ""
-    final_post: str = ""
+class OnboardingState(BaseModel):
+    pergunta_funcionario: str = ""
+    resposta_final: str = ""
 
 
-class ContentFlow(Flow[ContentState]):
+class OnboardingFlow(Flow[OnboardingState]):
 
     @start()
-    def plan_content(self, crewai_trigger_payload: dict = None):
-        print("Planning content")
+    def receber_pergunta(self, crewai_trigger_payload: dict = None):
+        print("Recebendo pergunta do funcionário")
 
         if crewai_trigger_payload:
-            self.state.topic = crewai_trigger_payload.get("topic", "AI Agents")
+            self.state.pergunta_funcionario = crewai_trigger_payload.get(
+                "pergunta", "Qual o horário de trabalho?"
+            )
             print(f"Using trigger payload: {crewai_trigger_payload}")
         else:
-            self.state.topic = "AI Agents"
+            self.state.pergunta_funcionario = "Qual o horário de trabalho?"
 
-        print(f"Topic: {self.state.topic}")
+        print(f"Pergunta: {self.state.pergunta_funcionario}")
 
-    @listen(plan_content)
-    def generate_content(self):
-        print(f"Generating content on: {self.state.topic}")
+    @listen(receber_pergunta)
+    def rotear_e_responder(self):
+        print(f"Roteando pergunta: {self.state.pergunta_funcionario}")
         result = (
-            ContentCrew()
+            OnboardingCrew()
             .crew()
-            .kickoff(inputs={"topic": self.state.topic})
+            .kickoff(inputs={"pergunta_funcionario": self.state.pergunta_funcionario})
         )
 
-        print("Content generated")
-        self.state.final_post = result.raw
-
-    @listen(generate_content)
-    def save_content(self):
-        print("Saving content")
-        output_dir = Path("output")
-        output_dir.mkdir(exist_ok=True)
-        with open(output_dir / "post.md", "w") as f:
-            f.write(self.state.final_post)
-        print("Post saved to output/post.md")
+        print("Resposta gerada")
+        self.state.resposta_final = result.raw
 
 
 def kickoff():
-    content_flow = ContentFlow()
-    content_flow.kickoff()
+    onboarding_flow = OnboardingFlow()
+    onboarding_flow.kickoff()
+    print("\n=== RESPOSTA FINAL ===")
+    print(onboarding_flow.state.resposta_final)
 
 
 def plot():
-    content_flow = ContentFlow()
-    content_flow.plot()
+    onboarding_flow = OnboardingFlow()
+    onboarding_flow.plot()
 
 
 def run_with_trigger():
@@ -69,17 +61,19 @@ def run_with_trigger():
     import sys
 
     if len(sys.argv) < 2:
-        raise Exception("No trigger payload provided. Please provide JSON payload as argument.")
+        raise Exception(
+            "No trigger payload provided. Please provide JSON payload as argument."
+        )
 
     try:
         trigger_payload = json.loads(sys.argv[1])
     except json.JSONDecodeError:
         raise Exception("Invalid JSON payload provided as argument")
 
-    content_flow = ContentFlow()
+    onboarding_flow = OnboardingFlow()
 
     try:
-        result = content_flow.kickoff({"crewai_trigger_payload": trigger_payload})
+        result = onboarding_flow.kickoff({"crewai_trigger_payload": trigger_payload})
         return result
     except Exception as e:
         raise Exception(f"An error occurred while running the flow with trigger: {e}")
