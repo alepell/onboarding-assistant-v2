@@ -1,0 +1,11 @@
+Documentação Técnica - Ferramentas Internas
+
+Acesso ao VPN: solicitado através do portal ServiceNow, categoria "Acesso Remoto". Aprovação leva até 24h úteis.
+
+Ambiente de desenvolvimento: todos os projetos usam Git com fluxo GitFlow. Branches de feature devem seguir o padrão feature/JIRA-123-descricao.
+
+Acesso a bancos de dados: solicitado via ServiceNow, categoria "Acesso a Dados", requer aprovação do Data Owner do projeto.
+
+Ferramenta de CI/CD: a empresa utiliza Jenkins para pipelines de build e deploy. Pipelines quebrados devem ser reportados no canal #devops-alerts do Slack.
+
+Política de senhas: senhas devem ter no mínimo 12 caracteres, ser trocadas a cada 90 dias, e não podem ser reutilizadas nas últimas 5 trocas.
