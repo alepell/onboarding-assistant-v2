@@ -1,56 +1,129 @@
-# {{crew_name}} Crew
+# Onboarding Assistant — Assistente de Onboarding com IA Multi-Agente
 
-Welcome to the {{crew_name}} Crew project, powered by [crewAI](https://crewai.com). This template is designed to help you set up a multi-agent AI system with ease, leveraging the powerful and flexible framework provided by crewAI. Our goal is to enable your agents to collaborate effectively on complex tasks, maximizing their collective intelligence and capabilities.
+Assistente inteligente que responde às dúvidas mais comuns de funcionários recém-contratados durante o **onboarding**, consultando a documentação oficial da empresa (políticas de RH e documentação técnica interna) em vez de depender do conhecimento genérico do modelo.
 
-## Installation
+O sistema usa uma arquitetura **multi-agente** com **RAG (Retrieval-Augmented Generation)**: um agente coordenador recebe a pergunta, decide qual especialista é responsável por respondê-la e delega a tarefa. Cada especialista busca a resposta diretamente na documentação real da empresa, o que reduz alucinações e garante respostas ancoradas em fontes oficiais.
 
-Ensure you have Python >=3.10 <3.14 installed on your system. This project uses [UV](https://docs.astral.sh/uv/) for dependency management and package handling, offering a seamless setup and execution experience.
+## O problema que resolve
 
-First, if you haven't already, install uv:
+Todo funcionário novo faz as mesmas perguntas nas primeiras semanas — "qual o horário de trabalho?", "como configuro a VPN?", "como funciona o home office?". Isso consome tempo do RH e dos times técnicos. Este projeto centraliza esse atendimento em um assistente que responde 24/7, sempre com base na documentação vigente.
+
+## Como funciona (arquitetura)
+
+```
+Pergunta do funcionário
+        │
+        ▼
+   API (FastAPI)  ──►  Flow (CrewAI)
+                            │
+                            ▼
+                 Agente Coordenador (manager)
+                    roteia a pergunta
+                   ┌────────┴────────┐
+                   ▼                 ▼
+        Especialista de RH   Especialista Técnico
+                   │                 │
+                   ▼                 ▼
+             RAG sobre          RAG sobre
+           manual_rh.txt     docs_tecnicos.txt
+        (embeddings + busca vetorial no ChromaDB)
+```
+
+1. **Entrada** — A pergunta chega via endpoint HTTP (`POST /perguntar`) exposto com FastAPI.
+2. **Orquestração** — Um `Flow` do CrewAI recebe a pergunta e dispara a *crew*.
+3. **Roteamento** — Uma *crew* com processo **hierárquico** usa um agente gerente (`gpt-4o`) que classifica a pergunta e delega ao especialista correto.
+4. **Especialistas** — Dois agentes especializados:
+   - **Especialista de RH**: horário de trabalho, home office, benefícios, férias, avaliação de desempenho.
+   - **Especialista Técnico**: VPN, Git, acesso a bancos de dados, CI/CD, política de senhas.
+5. **Busca na documentação (RAG)** — Cada especialista tem uma ferramenta própria que:
+   - Fatia o documento em *chunks* (`RecursiveCharacterTextSplitter`);
+   - Gera *embeddings* com o modelo `text-embedding-3-small` da OpenAI;
+   - Indexa e busca os trechos mais relevantes no **ChromaDB**;
+   - Devolve apenas o contexto relevante para o agente formular a resposta.
+6. **Guardrails** — Se a pergunta estiver **fora do escopo** (não é RH nem técnica), o assistente recusa educadamente em vez de "inventar" uma resposta com conhecimento geral do LLM.
+
+## Decisões técnicas que vale destacar
+
+- **Separação por especialista + RAG isolado por domínio**: cada agente consulta apenas a sua base de conhecimento, o que melhora a precisão e evita respostas cruzadas indevidas.
+- **Processo hierárquico com agente gerente**: o roteamento não é feito por `if/else` manual, mas por um agente que interpreta a intenção da pergunta.
+- **Combate a alucinações**: as instruções (backstory + task) exigem que os agentes só respondam com base na documentação oficial, e o *guardrail* de fora de escopo evita respostas fora do domínio.
+- **API pronta para integração**: exposta via FastAPI, o assistente pode ser plugado em um chat interno, Slack, intranet, etc.
+
+## Stack
+
+| Camada | Tecnologia |
+|--------|-----------|
+| Orquestração de agentes | [CrewAI](https://crewai.com) (Flows + Crews) |
+| LLM / Embeddings | OpenAI (`gpt-4o`, `text-embedding-3-small`) |
+| RAG / Busca vetorial | LangChain + ChromaDB |
+| API | FastAPI + Uvicorn |
+| Gerência de dependências | uv |
+| Linguagem | Python 3.10+ |
+
+## Como rodar
+
+Pré-requisitos: Python >=3.10 <3.14 e uma `OPENAI_API_KEY`.
 
 ```bash
+# 1. Instalar o uv (se ainda não tiver)
 pip install uv
-```
 
-Next, navigate to your project directory and install the dependencies:
-
-(Optional) Lock the dependencies and install them by using the CLI command:
-```bash
+# 2. Instalar as dependências
 crewai install
+
+# 3. Configurar a chave da OpenAI no arquivo .env
+#    OPENAI_API_KEY=sua_chave_aqui
 ```
 
-### Customizing
-
-**Add your `OPENAI_API_KEY` into the `.env` file**
-
-- Modify `src/onboarding_assistant_v2/config/agents.yaml` to define your agents
-- Modify `src/onboarding_assistant_v2/config/tasks.yaml` to define your tasks
-- Modify `src/onboarding_assistant_v2/crew.py` to add your own logic, tools and specific args
-- Modify `src/onboarding_assistant_v2/main.py` to add custom inputs for your agents and tasks
-
-## Running the Project
-
-To kickstart your flow and begin execution, run this from the root folder of your project:
+### Via linha de comando
 
 ```bash
 crewai run
 ```
 
-This command initializes the onboarding-assistant-v2 Flow as defined in your configuration.
+Executa o fluxo com uma pergunta de exemplo e imprime a resposta final no terminal.
 
-This example, unmodified, will run a content creation flow on AI Agents and save the output to `output/post.md`.
+### Via API
 
-## Understanding Your Crew
+```bash
+uvicorn api:app --reload
+```
 
-The onboarding-assistant-v2 Crew is composed of multiple AI agents, each with unique roles, goals, and tools. These agents collaborate on a series of tasks, defined in `config/tasks.yaml`, leveraging their collective skills to achieve complex objectives. The `config/agents.yaml` file outlines the capabilities and configurations of each agent in your crew.
+Depois é só enviar uma pergunta:
 
-## Support
+```bash
+curl -X POST http://localhost:8000/perguntar \
+  -H "Content-Type: application/json" \
+  -d '{"pergunta": "Como configuro a VPN?"}'
+```
 
-For support, questions, or feedback regarding the {{crew_name}} Crew or crewAI.
+Resposta:
 
-- Visit our [documentation](https://docs.crewai.com)
-- Reach out to us through our [GitHub repository](https://github.com/joaomdmoura/crewai)
-- [Join our Discord](https://discord.com/invite/X4JWnZnxPb)
-- [Chat with our docs](https://chatg.pt/DWjSBZn)
+```json
+{ "resposta": "..." }
+```
 
-Let's create wonders together with the power and simplicity of crewAI.
+## Estrutura do projeto
+
+```
+.
+├── api.py                          # Endpoint FastAPI
+├── docs/
+│   ├── manual_rh.txt               # Base de conhecimento de RH
+│   └── docs_tecnicos.txt           # Base de conhecimento técnica
+└── src/onboarding_assistant_v2/
+    ├── main.py                     # Flow do CrewAI (entrada e orquestração)
+    ├── tools/custom_tool.py        # Ferramentas de RAG (RH e Técnica)
+    └── crews/onboarding_crew/
+        ├── onboarding_crew.py      # Definição da crew e dos agentes
+        └── config/
+            ├── agents.yaml         # Papéis, objetivos e comportamento dos agentes
+            └── tasks.yaml          # Tarefa de atendimento e regras de escopo
+```
+
+## Possíveis evoluções
+
+- Persistir o índice vetorial (hoje é reconstruído a cada consulta) para reduzir latência e custo.
+- Adicionar novos domínios de conhecimento (ex.: financeiro, jurídico) criando novos especialistas.
+- Histórico de conversa e memória para perguntas de acompanhamento.
+- Observabilidade (logs, métricas e avaliação da qualidade das respostas).
